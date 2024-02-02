@@ -1,4 +1,4 @@
-# Vivian Kuang's Data Science Portfolio
+#Data Scientist Portfolio
 
 ### Profile 
 
