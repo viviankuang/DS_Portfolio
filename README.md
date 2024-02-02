@@ -1,5 +1,4 @@
-#Data Scientist Portfolio
-
+# Data Scientist Portfolio
 ### Profile 
 
 ### Work Experience
