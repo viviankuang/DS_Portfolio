@@ -14,8 +14,8 @@
 - Oracle Application and Database Admin (Dec‘00 – Sep‘03)
   
 #### Projects   
-- *** Twitter Sentiment Analysis - Data Pipeline & Model Development
-##### Tools used: AWS (EC2, S3) , NLP, Logistic Regression, PySpark (Databricks), Kinesis, and Athena to produce dynamic QuickSight dashboard
+##### *** Twitter Sentiment Analysis - Data Pipeline & Model Development
+Tools used: AWS (EC2, S3) , NLP, Logistic Regression, PySpark (Databricks), Kinesis, and Athena to produce dynamic QuickSight dashboard
 - *** Click Through Rate Analysis - Sklearn Classification Model
 ##### Exploratory Data Analysis, Visualize Feature Engineering with Matplotlib,  Build Decision Tree, SVM, and XGBoost Models and tune the parameter
 - *** Automated Email Routing with Neural Networks and NLP
