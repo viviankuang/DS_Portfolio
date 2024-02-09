@@ -14,15 +14,15 @@
 - Oracle Application and Database Admin (Dec‘00 – Sep‘03)
   
 #### Projects   
-*** Twitter Sentiment Analysis - Data Pipeline & Model Development
+- *** Twitter Sentiment Analysis - Data Pipeline & Model Development
 Tools used: AWS (EC2, S3) , NLP, Logistic Regression, PySpark (Databricks), Kinesis, and Athena to produce dynamic QuickSight dashboard
-*** Click Through Rate Analysis - Sklearn Classification Model
+- *** Click Through Rate Analysis - Sklearn Classification Model
 Exploratory Data Analysis, Visualize Feature Engineering with Matplotlib,  Build Decision Tree, SVM, and XGBoost Models and tune the parameter
-*** Automated Email Routing with Neural Networks and NLP
+- *** Automated Email Routing with Neural Networks and NLP
 Developed solution to accurately classify and respond to or rout incoming email requests to the appropriate department, optimizing workflow efficiency
-*** Web Scraping - ZOLO.com House Price Analysis 
+- *** Web Scraping - ZOLO.com House Price Analysis 
 Utilized Selenium & BeautifulSoup to extract & analyze pricing and feature data, present the analysis 
-*** Data Visualization - New York Uber and Weather Analysis and Reporting
+- *** Data Visualization - New York Uber and Weather Analysis and Reporting
 Created MySQL Database to store the analysis interim data and built Tableau dashboard to visualize info and trends in data and interactively shows the relations of weather relation and Uber rides
 
 
