@@ -1,0 +1,852 @@
+/***********************************
+   MIDTERM PROJECT - SQL SCRIPT
+************************************/
+
+-- Create CRT Database Schema and load data
+-- Version 1.0
+-- Version 1.1 replay comment # of sql to --
+-- Author: Vivian Kuang
+
+/*
+ SQL Script Conclusions:
+ 1, get straight about the business logic before starting writing scripts, scenarios P, P-v...(v), P-v..(v)-c
+ 2, use ER diagram, but the diagram has some errors:
+        a, based on the scenarios, each transaction has one click only but er shows one-to-many
+        b, each unique transaction can has multiple views, thus the PK of a view shall have maid, view_time, and payment_time,
+ 2.5, study the data files, considering notepad++, excel(as some larger than 1.8g and use filter), python(good at dealing text files)
+ 3, loading data from small to big files. when loading click csv file has multiple duplicated clicks which regard as errors and not loaded
+    loading views shall has multiple views of a transaction, but as the PK constraint (payment_time and maid), no such multiple views on table
+    Will it affect the model as we are not using a factual data set for training？ <ONLY P-V-C, NO P-V...(V)-C>
+ 4, With PK, loading chunk data is very time-consuming in my computer. When load the first view file it takes 40 minutes.The trans4
+    takes even longer 3 hours and reports java socket error in datagrip. I run it on MYSQL workbench for reliable connection still error after 6 hours.
+    consider: Command line will be better using less resource and achieve better performance.
+    Another thing to improve success of loading is to cut the file into small-size files. As 7.20-7.31 trans are not useful for training and test without labels(click)
+    trans 4 need can split to 0801-0804 to save each day for a file. loading info for each file take a few minutes as  sql script indicates
+ 5, for the large table can we create without PK and and then use union to join the table and add pk? -- nope as loaded with duplicated records can't alter anyway
+ 6, Notice MYSQL PK IS CASE-SENSITIVE
+ 7, I tried many different ways of loading bulk data into table with PK. It seems with such large of dataset tens of millions
+    It is very hard to load it into the table in my computer in minutes while without pk it is take seconds
+    Here for the business, the label variable is clicked, one trans only has one click, thus duplicated clicks meaning error data
+    need to be eliminated. While, transactions are relatively no many duplicated rows for this dataset and can be load without pk
+    during join most clicks will find the corresponding data and more important is to deal with the imbalanced dataset
+ 8, know better about data through sql: span of time, money, distinct category and distribution
+ 9, have some ideas obout feature selection, transactions table data integrated  (other than columns in ctrdata.csv, add ad_info.loc(ad_copy empty or not), ad_info.label)
+ 10, by combine maid and payment to create a new column pk_key and select distinct pk_key to insert into table transactions1
+     Thus, to make sure all rows in transanctions1 are unique (key maid and payment_time)
+ ***************************************** slip files using python **************************************
+import csv
+import io
+
+input_file = 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_720-4.csv'
+output_file = 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0801.csv'  # 1278159 rows
+
+--  Open input and output files ,  encoding = 'gb18030', errors='ignore'
+with open(input_file,'r', encoding='utf_8',errors='ignore') as csv_input, open(output_file, 'w', newline='', encoding='utf_8',errors='ignore') as csv_output:
+    reader = csv.reader(csv_input)
+    writer = csv.writer(csv_output)
+
+    --  Filter rows based on condition and write to output file
+    for row in reader:
+        if row[1].startswith('2017-08-01'):  # Assuming the second column is the date column
+            writer.writerow(row)
+ */
+-- set parameter to load in data and arrange memory for loading bulk data
+SET GLOBAL local_infile=ON;
+SET GLOBAL bulk_insert_buffer_size = 1024 * 1024 * 4;
+/*SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
+SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
+SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='TRADITIONAL';
+*/
+-- DROP database IF EXISTS ctr;
+DROP SCHEMA IF EXISTS ctr;
+CREATE SCHEMA ctr;
+
+USE ctr;
+
+--
+-- Create and load ad_info table
+
+DROP TABLE if EXISTS ctr.ad_info;
+
+CREATE TABLE ctr.ad_info (
+    row_id          SMALLINT,
+    ad_id           VARCHAR(10) BINARY NOT NULL,
+    ad_loc          VARCHAR(2),
+    ad_label        VARCHAR(10),
+    begin_time      DATETIME,
+    end_time        DATETIME,
+    pic_url         TEXT,
+    ad_url          TEXT,
+    ad_desc_url     VARCHAR(255),
+    ad_copy         TEXT,
+    min_money       VARCHAR(10),
+    mid             VARCHAR(8),
+    order_num       VARCHAR(30),
+    maid            TEXT,
+    city_id         TEXT,
+    idu_category    TEXT,
+    click_hide      VARCHAR(10),
+    price           VARCHAR(10),
+    sys             VARCHAR(10),
+    network         VARCHAR(10),
+    user_gender     VARCHAR(30),
+    payment_kind    VARCHAR(20),
+    PRIMARY KEY     (ad_id)
+)COLLATE utf8_bin;
+
+
+TRUNCATE ctr.ad_info;
+-- load data into the calendar table
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/aug-ad-info-with-tags.csv'
+into table ctr.ad_info
+fields terminated by ',' ENCLOSED BY '"'
+lines terminated by '\n'
+;
+
+-- check the loaded data
+-- 736 rows
+select count(*)
+from ctr.ad_info;
+
+-- check the loaded data
+select * from ctr.ad_info order by row_id;
+-- 1,a5kz,1,"",2016-08-30 14:06:36,2016-08-31 14:06:39,http://dev.boss.hsh.apicase.com/mobile/images/roulette/banner.png?v=1442481810,https://www.lehuipay.com/,"","","","",7|8,"",120100|110100,"",1,"","","","",""
+-- 2,yqMy,1,1002,2016-08-30 14:47:00,2016-09-04 00:00:00,http://static2.lehuipay.com/prompt/20160830_wacai_580_150jpg,http://sites.wacai.com/1134/index.html?a_f=346_WXZF_001,"","","","","","",110100,"",1,"","","","",""
+-- 3,4B1z,1,1007,2016-09-02 14:24:38,2016-09-07 01:00:00,http://static2.lehuipay.com/prompt/20160902_yingfu_580_150_1.jpeg,http://www.ef.com.cn/online/lp/cn/2014yr/mobile/master-temple-mobile-reading.aspx?ptn=spcn&etag=zyz_wxzf_banner2_20160902,"","","","","","",110100,"",1,"","","","",""
+
+select distinct ad_id from ctr.ad_info;
+-- 736
+-- aKgn
+-- aKj7
+-- aKkJ
+-- aKpJ
+
+select count(ad_loc) as num, ad_loc from ctr.ad_info
+group by 2
+order by 1 desc;
+-- 504,1
+-- 232,2
+
+
+select count(ad_label) as num, ad_label from ctr.ad_info
+group by 2
+order by 1 desc;
+-- 296,1001
+-- 122,1002
+-- 73,1003
+-- 64,1005
+-- 58,1009
+-- 42,""
+-- 31,1006
+-- 24,1007
+-- 13,1008
+-- 8,1010
+-- 5,1004
+
+
+select min(begin_time),max(begin_time),min(end_time),max(end_time)
+from ctr.ad_info
+;
+-- 2016-08-30 14:06:36,2017-09-07 00:00:00,2016-08-31 14:06:39,2018-11-10 20:21:36
+
+select distinct city_id from ad_info order by city_id;
+-- 105 rows
+-- ""
+-- 110100
+-- 110100|120100|140000|140200|140800|150400|152201|210100|210200|211300|220100|230100|310100|320100|320200|320500|320800|321000|330100|330200|331000|350100|350200|370100|370200|371300|410000|410100|410300|410900|411200|411282|420100|430100|430482|431100|440100|440300|440600|441300|441800|441900|450700|451300|460100|500100|510100|610000|610100|640100
+-- 110100|120100|140000|140200|140800|150400|152201|210100|210200|211300|220100|230100|310100|320100|320200|320500|320800|321000|330100|330200|331000|350100|350200|370100|370200|371300|410000|410100|410300|410900|411200|411282|420100|430100|430482|431100|440100|440300|440600|441300|441800|441900|450700|451300|460100|500100|510100|610000|610100|640100|442000
+
+select count(idu_category),idu_category from ad_info
+group by idu_category;
+-- 731,""
+-- 2,1000|1020|1019|1014|1015|1101|1112|1221|1222|1214|1111|1109|1402|1405
+-- 1,1015
+-- 1,1000|1020|1203|1225|1204|1219|1019|1014|1015|1104|1101|1112|1205|1206|1208|1216|1207|1211|1221|1222|1307|1214|1220|1115|1111|1109|1224|1308|1402|1405|1311|1301|1314|1
+-- 1,1000|1020|1019|1015|1104|1101|1112|1208|1216|1211|1221|1222|1109|1405
+
+select ad_loc,ad_copy,ad_label,min_money from ctr.ad_info
+where ad_loc = '2' and ad_copy = ""; -- 11 rows
+# 2,"","",""
+# 2,"","",""
+# 2,"","",""
+# 2,"",1005,""
+
+select ad_loc,ad_copy,ad_label,min_money from ad_info
+where ad_loc = '2' ;
+select ad_loc,ad_copy,ad_label,min_money from ad_info
+where ad_loc = '1' ;
+# 1,"",1001
+# 1,"",1007
+# 1,"",1003
+# 1,"",1006
+
+select ad_loc,ad_copy,ad_label,min_money from ad_info
+where ad_loc = '1' and ad_copy <> ""; -- 0 row
+-- 看图猜词，赢学习大礼包！
+-- ""
+-- ""
+
+/***********************/
+
+--
+-- Create and load clicks table
+
+DROP TABLE if EXISTS ctr.clicks;
+
+CREATE TABLE ctr.clicks (
+    click_time      DATETIME,
+    payment_time    DATETIME,
+    maid            VARCHAR(10) BINARY,
+    mid             VARCHAR(10),
+    ad_id           VARCHAR(10),
+    PRIMARY KEY     (maid, payment_time)
+)COLLATE utf8_bin;
+
+TRUNCATE ctr.clicks;
+-- load data into the table
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/aug-click-01-09.csv'
+into table ctr.clicks
+fields terminated by ',' ENCLOSED BY '"'
+lines terminated by '\n'
+;
+
+-- check the data
+select *
+from ctr.clicks
+limit 10;
+-- 2017-08-08 10:58:21,2017-08-08 10:58:17,000Xk,jW3N,apjA
+-- 2017-08-02 19:58:33,2017-08-02 19:58:12,0010A,7BJ3A,apjA
+-- 2017-08-08 08:03:12,2017-08-08 08:03:04,001G6,nPMmx,apjA
+
+select count(*)
+from ctr.clicks;
+-- 1221719 csv - some duplicated rows
+-- 980499
+
+-- 0000-00-00 00:00:00,2017-08-09 23:59:47
+select min(payment_time),max(payment_time)
+from ctr.clicks
+;
+
+select min(click_time),max(click_time)
+from ctr.clicks
+;
+/*2017-08-01 00:00:04,2017-08-09 23:59:57
+*/
+
+select *
+from ctr.clicks
+where date(payment_time) < '2017-08-01'
+order by payment_time;
+-- 3220 rows
+/*2017-08-04 14:29:40,0000-00-00 00:00:00,EL0rGD,wZB3,apjA
+2017-08-02 20:01:35,0000-00-00 00:00:00,eekYZ,eRKAO,apjA
+2017-08-03 08:54:21,0000-00-00 00:00:00,B7QbZG,zDAM,apjA
+2017-08-03 20:26:55,0000-00-00 00:00:00,3gBq2,QplX,apjA
+2017-08-09 14:10:19,2016-03-27 15:02:29,A2EXB,67L1,apjA
+2017-08-09 09:06:42,2016-04-26 18:59:34,PPOpw,MGQm,apjA
+*/
+select distinct ad_id
+from ctr.clicks
+;
+-- 27 rows
+-- apjA
+-- zm5g
+-- zjPY
+
+
+/***********************/
+--
+-- Create and load views table
+
+DROP TABLE if EXISTS ctr.views;
+
+CREATE TABLE ctr.views (
+    view_time       DATETIME,
+    payment_time    TIMESTAMP NOT NULL,
+    maid            VARCHAR(10) BINARY,
+    mid             VARCHAR(10),
+    ad_id           VARCHAR(10),
+    PRIMARY KEY     (maid, payment_time) -- view_time should be added to make view unique
+)COLLATE utf8_bin;
+
+TRUNCATE ctr.views;
+-- load data into the table
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/aug-view-01-09.csv'
+into table ctr.views
+fields terminated by ',' ENCLOSED BY '"'
+lines terminated by '\n'
+;
+
+-- check and understand data
+-- 9881921 csv - some duplicated rows
+-- 8,314,189
+select count(*)
+from ctr.views;
+
+-- 128352 csv - some duplicated rows
+-- 924934
+select count(*)
+from ctr.views
+where date(view_time) = '2017-08-01';
+
+
+select *
+from ctr.views
+limit 10;
+-- 2017-08-03 19:57:35,2017-08-03 19:57:28,0009g,2ONrj,apjA
+-- 2017-08-09 21:43:57,2017-08-09 21:43:54,0009g,2ONrj,apjA
+-- 2017-08-05 15:07:37,2017-08-05 15:07:23,000Eq,rLL1,zQBB
+
+
+-- 0000-00-00 00:00:00,2017-08-09 23:59:58
+select min(payment_time),max(payment_time)
+from ctr.views
+;
+
+select min(view_time),max(view_time)
+from ctr.views
+;
+-- 2017-08-01 00:00:00,2017-08-09 23:59:59
+
+
+select *
+from ctr.views
+where date(payment_time) < '2017-08-01'
+order by payment_time asc;
+/*-- 2828 rows   why no 0000-00-00 date
+2017-08-05 19:49:33,2016-03-26 19:41:46,w3Ngq,3AnR,apjA
+2017-08-09 12:44:29,2016-03-27 15:02:29,A2EXB,67L1,apjA
+2017-08-07 09:57:31,2016-04-04 17:54:09,Xdr8A,3n1O,apjA*/
+
+
+select distinct ad_id
+from ctr.views
+;
+-- 29 rows
+-- apjA
+-- zm5g
+-- zjPY
+
+/***********************/
+--
+-- Create and load transactions table
+DROP TABLE if EXISTS ctr.transactions;
+
+CREATE TABLE ctr.transactions (
+    maid            VARCHAR(10),
+    payment_time    DATETIME,
+    money           DECIMAL(15,2),
+    kind_pay        VARCHAR(8),
+    kind_card       VARCHAR(10),
+    mid             VARCHAR(8) ,
+    network         VARCHAR(10),
+    industry        VARCHAR(15),
+    gender          VARCHAR(8),
+    address         TEXT,
+    PRIMARY KEY     (maid, payment_time)
+);
+
+
+truncate ctr.transactions;
+-- load data into the table
+alter table ctr.transactions DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0801.csv' -- 50' -- 1,278,134 rows affected in 57 s 217 ms -- csv 1278159
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0802.csv' -- 5'25" -- 1,213,254 rows affected in 4 m 31 s -- csv 1213275
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+alter table ctr.transactions DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0803.csv' -- 1,254,131 rows affected in 6 m 38 s -- disable key 1,254,131 rows affected in 5 m 31 s -- csv 1254153
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+alter table ctr.transactions DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0804.csv' -- 467,401 rows affected in 2 m 51 s -- 467,401 rows affected in 2 m 54 s
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+alter table ctr.transactions DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0804-2.csv' -- no disable key820,980 rows affected in 5 m 30
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+alter table ctr.transactions enable keys;
+
+
+-- check data
+select min(payment_time),max(payment_time)
+from transactions
+;
+
+
+select * from ctr.transactions
+order by payment_time desc
+limit 100
+;
+
+/***********************/
+alter table ctr.transactions DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0805.csv' -- no key 1,167,638 rows affected in 19 s -- with key 1,167,610 rows affected in 9 m 36 s 603 ms
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0806.csv' -- no key 1,169,638 rows affected in 15 s 981 ms -- with key 1,169,591 rows affected in 8 m 9 s 613 ms
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0807.csv' -- no key load data 1,300,406 rows affected in 21 s 97 ms -- with key 1,300,378 rows affected in 9 m 58 s
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0808.csv' -- no key load data 1,353,539 rows affected in 25 s -- with key 1,353,509 rows affected in 11 m 38 s
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_0809.csv' -- no key load data 1,299,918 rows affected in 19 s -- with key 1,299,893 rows affected in 12 m 55 s
+into table ctr.transactions
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+
+-- check and study data
+select count(*) from transactions;
+-- 11324881
+
+select *
+from ctr.transactions
+limit 10;
+-- -- 0009g,2017-08-03 19:57:28,1120.00,4JBo,DEBIT,2ONrj,3g+,1204,female,通州区杨庄路杨庄公交站
+-- -- 0009g,2017-08-09 21:43:54,1640.00,4JBo,DEBIT,2ONrj,3g+,1204,female,通州区杨庄路杨庄公交站
+-- -- 000dq,2017-08-04 13:36:32,2500.00,4JBo,DEBIT,2Z36,3g+,1220,female,昌平区沙河镇兆丰家园底商
+-- -- 000Eq,2017-08-05 15:07:23,1500.00,4JBo,DEBIT,rLL1,3g+,1000,male,南山区学府路仓前锦福苑6_7栋1_8
+
+select count(maid), maid from ctr.transactions
+group by 2
+order by 1 desc;
+/*-- 11324881 row
+-- 301,b0xO7
+-- 147,GmRo9X
+-- 146,JN1pbl
+-- 144,qY0Wx
+-- 140,GrPAbM*/
+
+
+select min(payment_time),max(payment_time)
+from ctr.transactions
+;
+-- 2017-08-01 00:00:01,2017-08-09 23:59:59
+
+select min(money),max(money)
+from ctr.transactions
+;
+-- 1.00,2900000.00
+
+select count(gender), gender from ctr.transactions
+group by 2
+order by 1 desc;
+-- 9295843,male
+-- 1970464,female
+-- 58034,unkonwn
+-- 540,""
+
+
+select count(industry), industry from ctr.transactions
+group by 2
+order by 1 desc;
+
+-- 35 rows
+-- 6178907,1000
+-- 1642928,1203
+-- 866059,1204
+-- 852356,1225
+-- 472997,1019
+-- 360183,1020
+-- 280440,1014
+
+select count(kind_pay) as num, kind_pay from ctr.transactions
+group by 2
+order by 1 desc;
+-- 7709673,4JBo
+-- 2384371,zO8g
+-- 805283,zLGr
+-- 425554,zrgM
+
+
+select count(kind_card) as num, kind_card from ctr.transactions
+group by 2
+order by 1 desc;
+
+select *
+from ctr.transactions
+where date(payment_time) < '2017-08-01'
+order by payment_time asc;
+-- 2828 rows
+-- 2017-08-05 19:49:33,2016-03-26 19:41:46,w3Ngq,3AnR,apjA
+-- 2017-08-09 12:44:29,2016-03-27 15:02:29,A2EXB,67L1,apjA
+-- 2017-08-07 09:57:31,2016-04-04 17:54:09,Xdr8A,3n1O,apjA
+
+
+
+/***********************/
+--
+-- Create and load analysis_data table
+-- pseudo code
+
+create table ctr.analysis_data
+(select transactions.maid as maid_transactions,
+        transactions.payment_time as payment_time_transactions,
+        money,
+        kind_Pay,
+        kind_Card,
+        transactions.mid as mid_transactions,
+        transactions.network,
+        industry,
+        gender,
+        address,
+        views.view_time,
+        views.payment_time as payment_time_views,
+        views.maid as maid_views,
+        views.mid as mid_views,
+        ad_info.ad_id as ad_id_tvca,
+        clicks.click_time,
+        clicks.payment_time,
+        transactions.maid,
+        transactions.mid,
+        clicks.ad_id as ad_id_clicks, -- exist ad_id, then clicked = 1 otherwise clicked = 0
+        ad_info.ad_loc,
+        ad_info.ad_label,
+        clicked
+ from clicks left join ad_info
+ on clicks.ad_id = ad_info.ad_id ) C_ad
+
+ from views left join C_ad
+ on views.maid = clicks.maid and views.payment_time = clicks.payment_time as V_C_ad
+
+ from transactions inner join V_C_ad
+ on transactions.maid = views.maid and transactions.payment_time = views.payment_time
+
+
+);
+
+/***********************/
+--
+-- Create and load analysis_data table
+DROP TABLE if EXISTS ctr.analysis_data;
+create table ctr.analysis_data -- 8,311,313 rows affected in 6 m 49 s 155 ms
+    (select -- count(*) -- 8311313
+            transactions.maid         as maid_transactions,
+            transactions.payment_time as payment_time_transactions,
+            money,
+            kind_Pay,
+            kind_Card,
+            transactions.mid          as mid_transactions,
+            transactions.network,
+            industry,
+            gender,
+            address,
+            V_C_Ad.*
+     from transactions
+              inner join
+          (select
+               -- count(*) -- 8314189
+               views.view_time,
+               views.payment_time as payment_time_views,
+               views.maid         as maid_views,
+               views.mid          as mid_views,
+               Clicks_Ad.*
+           from views
+                    left join
+                -- create Click_Ad_info table
+                    (select
+                         -- count(*) -- 980499
+                         clicks.click_time,
+                         clicks.payment_time as payment_time_clicks,
+                         clicks.maid         as maid_clicks,
+                         clicks.ad_id        as ad_id_clicks,
+                         ai.ad_id,
+                         ad_loc,
+                         ad_label
+                     from ctr.clicks
+                              left join ctr.ad_info ai on clicks.ad_id = ai.ad_id) Clicks_Ad
+                on views.maid = Clicks_Ad.maid_clicks AND
+                   views.payment_time = Clicks_Ad.payment_time_clicks -- AND views.ad_id = Clicks_Ad.ad_id
+          ) V_C_Ad
+          on transactions.maid = V_C_Ad.maid_views AND transactions.payment_time = V_C_Ad.payment_time_views)
+;
+commit;
+
+select * from analysis_data
+limit 10;
+
+-- check clicks and noclicks
+select count(*) from analysis_data -- 977074
+where ad_id is not null
+order by payment_time_clicks
+;
+select count(*) from analysis_data -- 7334239
+where ad_id is  null
+order by payment_time_clicks
+;
+
+/********************************/
+-- output table to csv files
+/********************************/
+-- clicks for analysis
+-- SELECT COLUMN_NAME FROM information_schema.COLUMNS C WHERE table_name = 'analysis_data' -- add header of column names
+-- union
+-- select
+--     maid_transactions         varchar(10)                     null,
+--     payment_time_transactions datetime                        not null,
+--      money                     decimal(15, 2)                  null,
+--      kind_Pay                  varchar(8)                      null,
+--      kind_Card                 varchar(10)                     null,
+--      mid_transactions          varchar(8)                      null,
+--      network                   varchar(10)                     null,
+--      industry                  varchar(15)                     null,
+--      gender                    varchar(8)                      null,
+--      address                   text                            null,
+--      view_time                 datetime                        null,
+--      payment_time_views        timestamp                       not null,
+--      maid_views                varchar(10) collate utf8mb3_bin not null,
+--      mid_views                 varchar(10) collate utf8mb3_bin null,
+--      click_time                datetime                        null,
+--      payment_time_clicks       datetime                        null,
+--      maid_clicks               varchar(10) collate utf8mb3_bin null,
+--      ad_id_clicks              varchar(10) collate utf8mb3_bin null,
+--      ad_id                     varchar(10) collate utf8mb3_bin null,
+--      ad_loc                    varchar(2) collate utf8mb3_bin  null,
+--      ad_label                  varchar(10) collate utf8mb3_bin null
+--      union
+select *
+into outfile 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/analysis_data_clicks.csv'
+fields terminated by ','
+enclosed by '"'
+escaped by '\\'
+lines terminated by '\n'
+from ctr.analysis_data
+where ad_id is not null
+order by payment_time_clicks
+;
+
+-- no_click for analysis
+select *
+into outfile 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/analysis_data_noclick.csv' -- 'C:\\Users\\vivian\\Desktop\\WeCloudData\\Midterm\\data files\\analysis_data.csv'
+fields terminated by ','
+enclosed by '"'
+escaped by '\\'
+lines terminated by '\n'
+from ctr.analysis_data
+where ad_id is null
+order by payment_time_clicks
+;
+
+SHOW VARIABLES LIKE 'secure_file_priv';
+--  secure_file_priv,C:\ProgramData\MySQL\MySQL Server 8.0\Uploads\
+
+-- SET GLOBAL secure_file_priv = "C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/";  -- readonly parameter
+
+
+
+/************* loading methods try-out*****************/
+/*************load data to tables without pk and insert rows of the tables to the table with pk****************/
+
+DROP TABLE if EXISTS ctr.trans4;
+
+CREATE TABLE ctr.trans4 (
+    maid            VARCHAR(10),
+    payment_time    DATETIME,
+    money           DECIMAL(15,2),
+    kind_pay        VARCHAR(8),
+    kind_card       VARCHAR(10),
+    mid             VARCHAR(8) ,
+    network         VARCHAR(10),
+    industry        VARCHAR(15),
+    gender          VARCHAR(8),
+    address         TEXT
+--      PRIMARY KEY     (maid, payment_time)
+);
+
+
+truncate ctr.trans4;
+-- load data into the table
+alter table ctr.trans4 DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_4.csv' -- 18,401,236 rows affected in 4 m 18 s 525 ms
+into table ctr.trans4
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+
+
+ALTER TABLE trans4
+ADD pk_key VARCHAR(255) AS (CONCAT(maid, payment_time));
+
+select * from trans4
+limit 10;
+
+DROP TABLE if EXISTS ctr.trans5;
+
+CREATE TABLE ctr.trans5 (
+    maid            VARCHAR(10),
+    payment_time    DATETIME,
+    money           DECIMAL(15,2),
+    kind_pay        VARCHAR(8),
+    kind_card       VARCHAR(10),
+    mid             VARCHAR(8) ,
+    network         VARCHAR(10),
+    industry        VARCHAR(15),
+    gender          VARCHAR(8),
+    address         TEXT
+--      PRIMARY KEY     (maid, payment_time)
+);
+
+
+truncate ctr.trans5;
+-- load data into the table
+alter table ctr.trans5 DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_5.csv' -- 18,332,597 rows affected in 4 m 18 s
+into table ctr.trans5
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+
+ALTER TABLE trans5
+ADD pk_key VARCHAR(255) AS (CONCAT(maid, payment_time));
+
+select * from trans5
+limit 10;
+
+DROP TABLE if EXISTS ctr.trans6;
+
+CREATE TABLE ctr.trans6 (
+    maid            VARCHAR(10),
+    payment_time    DATETIME,
+    money           DECIMAL(15,2),
+    kind_pay        VARCHAR(8),
+    kind_card       VARCHAR(10),
+    mid             VARCHAR(8) ,
+    network         VARCHAR(10),
+    industry        VARCHAR(15),
+    gender          VARCHAR(8),
+    address         TEXT
+--      PRIMARY KEY     (maid, payment_time)
+);
+
+
+truncate ctr.trans6;
+-- load data into the table
+alter table ctr.trans6 DISABLE KEYS;
+load data local infile 'C:/Users/vivian/Desktop/WeCloudData/Midterm/data files/trans_6.csv' -- 118,384,524 rows affected in 4 m 23 s 604 ms
+into table ctr.trans6
+    character set 'utf8'
+fields terminated by ','
+    ENCLOSED BY '"'
+lines terminated by '\n'
+;
+commit;
+
+ALTER TABLE trans6
+ADD pk_key VARCHAR(255) AS (CONCAT(maid, payment_time));
+
+select * from trans6
+limit 10;
+
+DROP TABLE if EXISTS ctr.transactions1;
+
+CREATE TABLE ctr.transactions1 (
+    pk_key          VARCHAR(255),
+    maid            VARCHAR(10),
+    payment_time    DATETIME,
+    money           DECIMAL(15,2),
+    kind_pay        VARCHAR(8),
+    kind_card       VARCHAR(10),
+    mid             VARCHAR(8) ,
+    network         VARCHAR(10),
+    industry        VARCHAR(15),
+    gender          VARCHAR(8),
+    address         TEXT
+
+--     PRIMARY KEY     (maid, payment_time)
+);
+
+-- alter table ctr.transactions1 drop primary key; -- drop add pk not working as duplicated rows */
+alter table ctr.transactions1 disable keys; -- not able to disable PK
+truncate table ctr.transactions1;
+INSERT INTO ctr.transactions1 -- distinct value on pk_key to input unique transactions
+SELECT DISTINCT pk_key,maid, payment_time,money,kind_pay,kind_card,mid, network,industry,gender,address
+FROM ctr.trans4
+;
+--  error:[HY000][1114] The table 'transactions1' is full
+--   out of disk space, I free 4.9g before running, how come?
+
+commit;
+select count(*) from transactions1;
+
+INSERT INTO ctr.transactions1 -- distinct value on pk_key working to input unique transactions
+SELECT DISTINCT pk_key,maid, payment_time,money,kind_pay,kind_card,mid, network,industry,gender,address
+FROM ctr.trans5
+;
+INSERT INTO ctr.transactions1 -- distinct value on pk_key working to input unique transactions
+SELECT DISTINCT pk_key,maid, payment_time,money,kind_pay,kind_card,mid, network,industry,gender,address
+FROM ctr.trans6
+;
+-- alter table ctr.transactions1 add primary key (maid,payment_time);
+--      UNION
+--  SELECT DISTINCT *
+--  FROM trans5;
+
+--      UNION ALL
+--  SELECT distinct *
+--  FROM trans5
+--  ;
+
+select * from ctr.transactions1 limit 10;
